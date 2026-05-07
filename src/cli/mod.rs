@@ -6,7 +6,7 @@ use crate::input::Input;
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct Cli {
-    /// Shell command to run for each input chunk (passed to `sh -c`)
+    /// Shell command to run for each input line (passed to `sh -c`)
     #[arg(short, long)]
     pub command: String,
 
@@ -18,7 +18,7 @@ pub struct Cli {
     #[arg(long, conflicts_with = "file")]
     pub stdin: bool,
 
-    /// Read input from file
+    /// Read input from a file (one job per line)
     #[arg(long)]
     pub file: Option<PathBuf>,
 
@@ -26,26 +26,40 @@ pub struct Cli {
     #[arg(long)]
     pub cached_only: bool,
 
-    /// Don't output any information to stdout
+    /// Suppress stdout output (errors still go to stderr)
     #[arg(short, long)]
     pub silent: bool,
 
     /// Force re-run even if a cached result exists
     #[arg(long, short)]
     pub force: bool,
+
+    /// Number of parallel jobs [default: logical CPU count]
+    #[arg(
+        short = 'j',
+        long,
+        default_value_t = default_parallelism(),
+    )]
+    pub jobs: usize,
+
+    /// Expose the input line as an env var in the child process (e.g. --input-var LINE)
+    #[arg(long)]
+    pub input_var: Option<String>,
+}
+
+fn default_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
 }
 
 impl Cli {
     pub fn input(&self) -> Input {
         match (self.stdin, &self.file) {
-            (true, None) => Input::Stdin,
+            (true, None)   => Input::Stdin,
             (false, Some(path)) => Input::File(path.clone()),
-
-            // default if nothing specified (you can change this if you want strictness)
-            (false, None) => Input::Stdin,
-
-            // clap should prevent this, but don't trust it blindly
-            (true, Some(_)) => unreachable!("clap enforces conflicts"),
+            (false, None)  => Input::Stdin, // default when nothing specified
+            (true, Some(_)) => unreachable!("clap enforces conflicts_with"),
         }
     }
 }

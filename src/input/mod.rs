@@ -13,7 +13,6 @@ impl Input {
         match self {
             Input::Stdin => {
                 let stdin = stdin().lock();
-
                 Ok(Box::new(BufReader::new(stdin)))
             }
             Input::File(path) => Ok(Box::new(BufReader::new(File::open(path)?))),

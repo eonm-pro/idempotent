@@ -15,13 +15,10 @@ impl DbBuilder {
     pub fn build(self) -> Result<Db, Error> {
         let conn = Connection::open(&self.0)?;
 
-        // WAL mode: readers never block writers and writers never block readers.
-        // synchronous=NORMAL: fsync only on WAL checkpoints, not every commit —
-        // safe against OS crashes (WAL is durable), much faster than FULL.
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous  = NORMAL;
-             PRAGMA cache_size   = -8000;  -- 8 MB page cache
+             PRAGMA cache_size   = -8000;
              PRAGMA temp_store   = MEMORY;
              CREATE TABLE IF NOT EXISTS jobs (
                  id         TEXT    PRIMARY KEY,
@@ -45,6 +42,7 @@ pub struct Db {
     conn: Connection,
 }
 
+#[allow(dead_code)]
 impl Db {
     pub fn get(&self, id: &str) -> Result<Option<Job>, Error> {
         let mut stmt = self.conn.prepare_cached(
@@ -61,8 +59,6 @@ impl Db {
         }
     }
 
-    /// Return all job IDs whose status is 'Done'. Used to build the in-process
-    /// cache at startup so subsequent lookups cost zero SQLite round-trips.
     pub fn all_done_ids(&self) -> Result<std::collections::HashSet<String>, Error> {
         let mut stmt = self.conn.prepare(
             "SELECT id FROM jobs WHERE status = 'Done'"
@@ -73,7 +69,6 @@ impl Db {
         Ok(ids)
     }
 
-    /// Return all cached jobs (for --cached-only display).
     pub fn all_jobs(&self) -> Result<Vec<Job>, Error> {
         let mut stmt = self.conn.prepare(
             "SELECT id, command, input, start_time, end_time,
@@ -86,7 +81,6 @@ impl Db {
         Ok(jobs)
     }
 
-    /// Insert or replace a single job. Prefer `upsert_batch` in hot paths.
     pub fn upsert(&self, job: &Job) -> Result<(), Error> {
         let mut stmt = self.conn.prepare_cached(
             "INSERT OR REPLACE INTO jobs
@@ -98,11 +92,6 @@ impl Db {
         Ok(())
     }
 
-    /// Write all jobs in `batch` inside **one transaction**.
-    ///
-    /// SQLite's real cost is the fsync on each commit. Batching N rows into
-    /// one transaction means one fsync instead of N — a 10-100× speedup for
-    /// small, fast jobs.
     pub fn upsert_batch(&self, batch: &[Job]) -> Result<(), Error> {
         if batch.is_empty() { return Ok(()); }
 
@@ -135,7 +124,7 @@ fn row_to_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         id:         row.get(0)?,
         command:    row.get(1)?,
         input:      row.get(2)?,
-        input_var: None,
+        input_var:  None,
         start_time: row.get::<_, Option<i64>>(3)?.map(|v| v as u128),
         end_time:   row.get::<_, Option<i64>>(4)?.map(|v| v as u128),
         status,
@@ -146,12 +135,6 @@ fn row_to_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
     })
 }
 
-/// Execute a pre-prepared INSERT OR REPLACE statement for `job`.
-///
-/// We can't extract `params![...]` into a helper that returns `impl Params`
-/// because `params!` borrows its arguments, and a local `&str` for
-/// `status_str` would not live long enough to be returned. Passing the
-/// statement in and calling `execute` immediately sidesteps the lifetime.
 fn execute_job_stmt(
     stmt: &mut rusqlite::Statement<'_>,
     job: &Job,

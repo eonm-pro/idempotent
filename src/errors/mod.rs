@@ -7,4 +7,13 @@ pub enum Error {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("shell error: {0}")]
+    Shell(String),
+
+    #[error("worker pool shut down unexpectedly")]
+    PoolShutdown,
+
+    #[error("sink thread panicked")]
+    SinkPanicked,
 }

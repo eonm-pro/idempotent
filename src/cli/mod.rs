@@ -56,9 +56,9 @@ fn default_parallelism() -> usize {
 impl Cli {
     pub fn input(&self) -> Input {
         match (self.stdin, &self.file) {
-            (true, None) => Input::Stdin,
+            (true, None)   => Input::Stdin,
             (false, Some(path)) => Input::File(path.clone()),
-            (false, None) => Input::Stdin,
+            (false, None)  => Input::Stdin,
             (true, Some(_)) => unreachable!("clap enforces conflicts_with"),
         }
     }

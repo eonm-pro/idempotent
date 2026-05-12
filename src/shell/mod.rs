@@ -56,6 +56,10 @@ impl PersistentShell {
         let prefix = format!("{}", std::process::id());
 
         let mut child = Command::new("sh")
+            .arg("--norc")
+            .arg("--noprofile")
+            .arg("-u")
+            .env_clear()
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -95,9 +99,6 @@ impl PersistentShell {
                     return Err(io::Error::new(io::ErrorKind::Other, "mkfifo failed"));
                 }
 
-                // Spawn writer before sending the command. Opening a fifo for
-                // writing blocks until the read end is opened by sh — that
-                // happens as soon as sh starts the subshell.
                 let data_owned = data.to_owned();
                 let fifo_writer = fifo.clone();
                 std::thread::spawn(move || {
@@ -182,6 +183,10 @@ impl PersistentShell {
         let _ = self.child.wait();
 
         let mut child = Command::new("sh")
+            .arg("--norc")
+            .arg("--noprofile")
+            .arg("-u")
+            .env_clear()
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
